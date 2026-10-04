@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TU FieldOps - Sample</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef1f4;font:14px/1.4 system-ui,sans-serif;color:#14201b}
+#app{max-width:480px;margin:0 auto;padding:12px}
+.card{background:#fff;border:1px solid #e3e8e6;border-radius:12px;padding:12px;margin-bottom:10px}
+input,select,textarea,button{width:100%;padding:10px;margin:4px 0 8px;border:1px solid #cfd8d4;border-radius:8px;font:inherit}
+button{background:#0f4d36;color:#fff;border:0;font-weight:700;cursor:pointer}button.g{background:#e3e8e6;color:#14201b}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px}.top button{width:auto;padding:6px 12px}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fdeccd;margin-right:4px}.tag.b{background:#dbe7ff}.tag.o{background:#d6f2e2}
+.mu{color:#6b7873;font-size:12px}.err{color:#c0392b;font-size:13px}img{max-width:100%;border-radius:8px;margin-top:6px}
+</style></head><body><div id="app"></div>
+<script>
+const SUPABASE_URL="https://mcbwzlnkawddojhvzrqn.supabase.co", SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jYnd6bG5rYXdkZG9qaHZ6cnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwNDIxODgsImV4cCI6MjEwNjYxODE4OH0.XWIn-r8L06aLtfDLi-xFmKHpLDl-CsTCGT8TFQk5vps";
+const $=id=>document.getElementById(id), A=$('app');
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let sb,me=null,mode='in',cols=[],deps=[];
+const STAFF=['manager','engineer','technician'];
+if(SUPABASE_URL.startsWith('PASTE')){A.innerHTML='<div class="card"><b>Setup needed</b><p>Open index.html and paste your Supabase Project URL and anon key at the top of the script.</p></div>'}
+else{sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY);start()}
+async function start(){const{data:{session}}=await sb.auth.getSession();session?load():authView()}
+function authView(msg=''){A.innerHTML=`<div class="card"><h2>TU FieldOps</h2><div class="mu">Sample: work orders</div>
+${mode=='up'?'<input id="nm" placeholder="Full name"><select id="rl"><option value="doctor">Doctor</option><option value="manager">Project Manager</option><option value="engineer">Engineer</option><option value="technician">Technician</option></select>':''}
+<input id="em" type="email" placeholder="Email"><input id="pw" type="password" placeholder="Password (min 6)">
+<div class="err" id="er">${esc(msg)}</div><button onclick="go()">${mode=='in'?'Sign in':'Create account'}</button>
+<button class="g" onclick="mode=mode=='in'?'up':'in';authView()">${mode=='in'?'New user? Sign up':'Have account? Sign in'}</button></div>`}
+async function go(){const email=$('em').value,password=$('pw').value;let r;
+if(mode=='in')r=await sb.auth.signInWithPassword({email,password});
+else r=await sb.auth.signUp({email,password,options:{data:{full_name:$('nm').value,role:$('rl').value}}});
+if(r.error){const m=r.error.message;return $('er').textContent=/already registered/i.test(m)?'This email is already registered. Tap Sign in below.':/invalid login/i.test(m)?'Wrong email or password.':m}
+if(!r.data.session)return authView('Check your email to confirm, then sign in.');load()}
+async function load(){A.innerHTML='<div class="card mu">Loading...</div>';const{data:{session}}=await sb.auth.getSession();const uid=session.user.id;
+const[p,c,d]=await Promise.all([sb.from('profiles').select('*').eq('id',uid).single(),sb.from('colleges').select('*'),sb.from('departments').select('*')]);
+me=p.data;cols=c.data||[];deps=d.data||[];list()}
+async function shrink(f){try{const b=await createImageBitmap(f);const s=Math.min(1,1280/Math.max(b.width,b.height));const cv=document.createElement('canvas');cv.width=Math.round(b.width*s);cv.height=Math.round(b.height*s);cv.getContext('2d').drawImage(b,0,0,cv.width,cv.height);
+return await new Promise(r=>cv.toBlob(r,'image/jpeg',0.72))}catch(e){return f}}
+async function list(){const{data,error}=await sb.from('work_orders').select('*,colleges(name),departments(name),profiles(full_name)').order('created_at',{ascending:false}).limit(50);
+const o=data||[];
+A.innerHTML=`<div class="top"><div><b>${esc(me.full_name||'User')}</b><div class="mu">${esc(me.role)}</div></div><button class="g" onclick="out()">Logout</button></div>
+<button onclick="newView()">+ New work order</button>
+<div class="err">${error?esc(error.message):''}</div>
+${o.length?'':'<div class="card mu">No work orders yet.</div>'}
+${o.map(w=>`<div class="card"><span class="tag ${w.status=='Completed'?'o':w.status=='Pending'?'':'b'}">${esc(w.status)}</span><span class="mu">#${w.id}</span>
+<div><b>${esc(w.equipment)}</b></div><div class="mu">${esc(w.colleges?.name)} / ${esc(w.departments?.name)} &middot; by ${esc(w.profiles?.full_name)}</div>
+<div>${esc(w.description)}</div>${w.photo_url?`<img src="${esc(w.photo_url)}">`:''}
+${w.assigned_team?`<div class="mu">Team: ${esc(w.assigned_team)}</div>`:''}
+${STAFF.includes(me.role)?`<input id="t${w.id}" placeholder="Team (e.g. Aqeel + Ali)" value="${esc(w.assigned_team)}">
+<select id="s${w.id}">${['Pending','In Progress','Completed','Needs Parts','Cannot Repair'].map(s=>`<option ${s==w.status?'selected':''}>${s}</option>`).join('')}</select>
+<button onclick="save(${w.id})">Save</button>`:''}</div>`).join('')}`}
+function newView(){A.innerHTML=`<div class="card"><h3>New work order</h3>
+<select id="c" onchange="fill()">${cols.map(c=>`<option value="${c.id}">${esc(c.name)}</option>`).join('')}</select><select id="d"></select>
+<input id="eq" placeholder="Equipment name"><textarea id="ds" rows="3" placeholder="Problem"></textarea>
+<input id="ph" type="file" accept="image/*"><div class="err" id="er"></div>
+<button id="sd" onclick="send()">Send</button><button class="g" onclick="list()">Cancel</button></div>`;fill()}
+function fill(){const c=+$('c').value;$('d').innerHTML=deps.filter(d=>d.college_id==c).map(d=>`<option value="${d.id}">${esc(d.name)}</option>`).join('')}
+async function send(){const eq=$('eq').value.trim();if(!eq)return $('er').textContent='Enter equipment name';
+let url=null;const f=$('ph').files[0];const btn=$('sd');btn.disabled=true;btn.textContent='Sending...';
+if(f){const blob=await shrink(f);const path=`${me.id}/${Date.now()}.jpg`;const u=await sb.storage.from('photos').upload(path,blob,{contentType:'image/jpeg'});
+if(u.error){btn.disabled=false;btn.textContent='Send';return $('er').textContent=u.error.message}url=sb.storage.from('photos').getPublicUrl(path).data.publicUrl}
+const r=await sb.from('work_orders').insert({college_id:+$('c').value,department_id:+$('d').value,equipment:eq,description:$('ds').value,photo_url:url});
+if(r.error){btn.disabled=false;btn.textContent='Send';return $('er').textContent=r.error.message}list()}
+async function save(id){const r=await sb.from('work_orders').update({assigned_team:$('t'+id).value,status:$('s'+id).value}).eq('id',id);
+if(r.error)alert(r.error.message);list()}
+async function out(){await sb.auth.signOut();me=null;mode='in';authView()}
+</script></body></html>

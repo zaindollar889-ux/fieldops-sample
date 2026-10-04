@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>TU FieldOps - Admin</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.min.js"></script>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#eef1f4;font:14px/1.4 system-ui,sans-serif;color:#14201b}
+#app{max-width:1000px;margin:0 auto;padding:12px}
+.card{background:#fff;border:1px solid #e3e8e6;border-radius:12px;padding:12px;margin-bottom:10px}
+input,select,button{padding:10px;margin:4px 0;border:1px solid #cfd8d4;border-radius:8px;font:inherit}
+button{background:#0f4d36;color:#fff;border:0;font-weight:700;cursor:pointer}button.g{background:#e3e8e6;color:#14201b}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;gap:8px}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}@media(max-width:600px){.grid{grid-template-columns:repeat(2,1fr)}}
+.big{font-size:26px;font-weight:700}.mu{color:#6b7873;font-size:12px}.err{color:#c0392b}
+.tag{display:inline-block;font-size:11px;font-weight:700;padding:2px 8px;border-radius:6px;background:#fdeccd}.In{background:#dbe7ff}.Co{background:#d6f2e2}.Ne,.Ca{background:#fde2de}
+.bar{height:8px;background:#e3e8e6;border-radius:4px;overflow:hidden;margin:3px 0 8px}.bar i{display:block;height:100%;background:#1b6b4a}
+.row{display:flex;gap:8px;flex-wrap:wrap}.row>*{flex:1;min-width:130px}
+.o{padding:10px 0;border-top:1px solid #e3e8e6}a{color:#0f4d36}
+</style></head><body><div id="app"></div>
+<script>
+const SUPABASE_URL="https://mcbwzlnkawddojhvzrqn.supabase.co",SUPABASE_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1jYnd6bG5rYXdkZG9qaHZ6cnFuIiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTEwNDIxODgsImV4cCI6MjEwNjYxODE4OH0.XWIn-r8L06aLtfDLi-xFmKHpLDl-CsTCGT8TFQk5vps";
+const sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY),A=document.getElementById('app'),$=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let all=[],me=null;
+(async()=>{const{data:{session}}=await sb.auth.getSession();session?check():login()})();
+function login(m=''){A.innerHTML=`<div class="card" style="max-width:380px;margin:40px auto"><h2>TU FieldOps Admin</h2><div class="mu">Admin accounts only</div>
+<input id="em" type="email" placeholder="Email" style="width:100%"><input id="pw" type="password" placeholder="Password" style="width:100%">
+<div class="err">${esc(m)}</div><button style="width:100%" onclick="go()">Sign in</button></div>`}
+async function go(){const r=await sb.auth.signInWithPassword({email:$('em').value,password:$('pw').value});
+if(r.error)return login(/invalid/i.test(r.error.message)?'Wrong email or password.':r.error.message);check()}
+async function check(){A.innerHTML='<div class="card mu">Loading...</div>';const{data:{session}}=await sb.auth.getSession();
+const{data:p}=await sb.from('profiles').select('*').eq('id',session.user.id).single();me=p;
+if(!p||p.role!=='admin'){await sb.auth.signOut();return login('Access denied: this page is for Admin only.')}load()}
+async function load(){const{data,error}=await sb.from('work_orders').select('*,colleges(name),departments(name),profiles(full_name,role)').order('created_at',{ascending:false}).limit(200);
+all=data||[];draw(error?error.message:'')}
+function draw(err=''){
+const fc=($('fc')||{}).value||'',fs=($('fs')||{}).value||'';
+const cols=[...new Set(all.map(w=>w.colleges?.name).filter(Boolean))];
+const rows=all.filter(w=>(!fc||w.colleges?.name==fc)&&(!fs||w.status==fs));
+const n=s=>all.filter(w=>w.status==s).length,by={};all.forEach(w=>{const k=(w.colleges?.name||'-')+' / '+(w.departments?.name||'-');by[k]=(by[k]||0)+1});
+const mx=Math.max(1,...Object.values(by));
+A.innerHTML=`<div class="top"><div><b>Admin Dashboard</b><div class="mu">${esc(me.full_name||'Admin')} &middot; view only</div></div><div><button class="g" onclick="load()">Refresh</button> <button class="g" onclick="out()">Logout</button></div></div>
+<div class="err">${esc(err)}</div>
+<div class="grid"><div class="card"><div class="mu">TOTAL ORDERS</div><div class="big">${all.length}</div></div><div class="card"><div class="mu">PENDING</div><div class="big">${n('Pending')}</div></div>
+<div class="card"><div class="mu">IN PROGRESS</div><div class="big">${n('In Progress')}</div></div><div class="card"><div class="mu">COMPLETED</div><div class="big">${n('Completed')}</div></div></div>
+<div class="card"><b>Orders by college / department</b><br><br>${Object.entries(by).map(([k,v])=>`<div class="mu">${esc(k)} (${v})</div><div class="bar"><i style="width:${v/mx*100}%"></i></div>`).join('')||'<span class="mu">No data</span>'}</div>
+<div class="card"><div class="row"><select id="fc" onchange="draw()"><option value="">All colleges</option>${cols.map(c=>`<option ${c==fc?'selected':''}>${esc(c)}</option>`).join('')}</select>
+<select id="fs" onchange="draw()"><option value="">All status</option>${['Pending','In Progress','Completed','Needs Parts','Cannot Repair'].map(s=>`<option ${s==fs?'selected':''}>${s}</option>`).join('')}</select></div>
+<div class="mu">${rows.length} orders</div>
+${rows.map(w=>`<div class="o"><span class="tag ${w.status.slice(0,2)}">${esc(w.status)}</span> <span class="mu">#${w.id} &middot; ${new Date(w.created_at).toLocaleString()}</span>
+<div><b>${esc(w.equipment)}</b> <span class="mu">${esc(w.colleges?.name)} / ${esc(w.departments?.name)}</span></div>
+<div class="mu">Requested by ${esc(w.profiles?.full_name)} &middot; Team: ${esc(w.assigned_team||'Not assigned')}</div>
+<div>${esc(w.description)}</div>${w.photo_url?`<a href="${esc(w.photo_url)}" target="_blank">View photo</a>`:''}</div>`).join('')}</div>`}
+async function out(){await sb.auth.signOut();login()}
+</script></body></html>
